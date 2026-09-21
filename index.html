@@ -50865,7 +50865,7 @@ function normalizeSchoolName(raw){
 
 function computeMatches(profile){
   const pool0 = (profile.division && profile.division !== 'ANY')
-    ? PROGRAMS.filter(p => (profile.division === 'D2') === p.conf.includes('(D2)'))
+    ? PROGRAMS.filter(p => (profile.division === 'D2') === p.conf.includes('D2'))
     : PROGRAMS;
   // Transfer-Ausschluss: das aktuelle Programm soll nicht als "Match"
   // vorgeschlagen werden, wenn der Spieler von genau dort wegwechselt.
