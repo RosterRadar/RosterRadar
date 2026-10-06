@@ -759,6 +759,9 @@
           <option value="ST">Stürmer (ST)</option>
         </select>
 
+        <label for="jerseyNumber" id="lblJerseyNumber">Rückennummer (optional)</label>
+        <input type="text" inputmode="numeric" pattern="[0-9]{1,2}" maxlength="2" id="jerseyNumber" value="" placeholder="z. B. 9 oder 00">
+
         <div class="row2">
           <div id="heightCmWrapper">
             <label for="height" id="lblHeightCm">Größe (cm)</label>
@@ -47738,6 +47741,46 @@ const CONFERENCE_PHRASES = {
   SUMMIT_LEAGUE: "The Summit League offers a competitive Division I environment with strong opportunities for player development.",
 };
 
+// Generischer Fallback fuer die ~16 Conferences, die NICHT in
+// CONFERENCE_PHRASES hinterlegt sind (z.B. MAC, MVC, OVC, NEC, WAC,
+// Horizon League) — ohne das wuerde die Conference in der Email fuer
+// diese Programme einfach komplett fehlen. Entfernt dafuer saubere
+// Klammer-Zusaetze wie "(D2)" oder "(RMAC, D2)" aus dem Anzeigenamen.
+function genericConferencePhrase(rawConf){
+  if(!rawConf) return null;
+  const cleanName = rawConf.replace(/\s*\([^)]*\)\s*$/, '').trim();
+  if(!cleanName) return null;
+  return `The opportunity to compete in the ${cleanName} is very appealing to me.`;
+}
+
+// Zufaelliger, positiver Hinweis auf den Spielstil des Teams. Bewusst nur
+// generische, schwer falsifizierbare Begriffe (aggressiv, mutig, schnell,
+// offensiv usw.) statt spezifischer taktischer Behauptungen wie
+// "possession-based" oder "build-from-the-back" — sowas kann fuer ein
+// konkretes Team schlicht falsch sein und unseriös wirken. Als Quelle wird
+// durchgehend Video-Material genannt, nie eine konkrete (erfundene)
+// taktische Analyse.
+const TEAM_STYLE_ADJECTIVES = [
+  "aggressive", "bold", "fast-paced", "attacking", "high-energy",
+  "relentless", "fearless", "dynamic", "hard-working", "intense",
+];
+function pickTeamStyleAdjectives(){
+  // Zwei verschiedene Adjektive ziehen, damit der Satz nicht jedes Mal
+  // nur ein einzelnes Wort austauscht, sondern spuerbar variiert.
+  const shuffled = [...TEAM_STYLE_ADJECTIVES].sort(() => Math.random() - 0.5);
+  return [shuffled[0], shuffled[1]];
+}
+function buildStyleSentence(){
+  const [adj1, adj2] = pickTeamStyleAdjectives();
+  const article = /^[aeiou]/i.test(adj1) ? 'an' : 'a';
+  return pickVariant([
+    `From watching video footage of the team, I've also been drawn to the ${adj1}, ${adj2} way your program plays, and I would be excited to bring my own game to that environment.`,
+    `Having watched video footage of the team, the ${adj1} and ${adj2} style your program plays really stood out to me, and I would love to be part of that.`,
+    `I also watched some video footage of the team and was drawn to how ${adj1} and ${adj2} the squad plays — that's exactly the kind of environment I want to compete in.`,
+    `Watching video footage of the team, I noticed ${article} ${adj1}, ${adj2} identity to the way your program plays, which is something I'd be excited to contribute to.`,
+  ]);
+}
+
 // Normalisiert einen rohen conf-String aus PROGRAMS auf einen der
 // obigen Schluessel. Reihenfolge wichtig (spezifischer vor generischer).
 function normalizeConference(raw){
@@ -47816,10 +47859,30 @@ function getPositionNeed(m){
   return 'MEDIUM';
 }
 
+// Allgemeiner Zufalls-Picker, nach demselben Muster wie
+// pickTeamStyleCompliment — wird unten fuer jede Textvariante genutzt,
+// damit nicht bei vielen Nutzern mit aehnlichem Profil fuer dasselbe
+// Programm exakt derselbe Email-Text rauskommt.
+function pickVariant(arr){
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
 const POSITION_NEED_OPENING = {
-  HIGH: (posLabel) => `I believe my experience could match your current needs at the ${posLabel} position and provide an opportunity to contribute to your program.`,
-  MEDIUM: () => `I believe my background could provide valuable competition and depth within your program.`,
-  LOW: () => `I am attracted by the opportunity to join a competitive environment and continue developing as a student-athlete.`,
+  HIGH: (posLabel) => pickVariant([
+    `I believe my experience could match your current needs at the ${posLabel} position and provide an opportunity to contribute to your program.`,
+    `Given your current roster situation at the ${posLabel} position, I believe my experience could be a valuable addition to your program.`,
+    `My experience as a ${posLabel} lines up well with what I understand to be a current need on your roster, and I would welcome the chance to contribute.`,
+  ]),
+  MEDIUM: () => pickVariant([
+    `I believe my background could provide valuable competition and depth within your program.`,
+    `I think my background would add meaningful depth and competition to your roster.`,
+    `My experience so far would, I believe, let me compete for playing time while adding depth to your program.`,
+  ]),
+  LOW: () => pickVariant([
+    `I am attracted by the opportunity to join a competitive environment and continue developing as a student-athlete.`,
+    `What draws me to your program most is the chance to keep developing as a player within a competitive environment.`,
+    `I am especially interested in the opportunity to push myself further within a competitive program like yours.`,
+  ]),
 };
 
 // Baut bis zu 3 college-spezifische Gruende, in der vorgegebenen
@@ -47828,13 +47891,28 @@ const POSITION_NEED_OPENING = {
 function buildCollegeReasons(m, confPhrase){
   const reasons = [];
   if(m.arch.pastMatches > 0){
-    reasons.push("I noticed that your program has successfully recruited players with a similar background, which encouraged me to reach out.");
+    reasons.push(pickVariant([
+      "I noticed that your program has successfully recruited players with a similar background, which encouraged me to reach out.",
+      "Your program's track record of recruiting players with a similar background is part of what encouraged me to reach out.",
+      "I came across your program while researching schools that have recruited players with a background like mine, which stood out to me.",
+    ]));
   }
   if(m.heightInRange){
-    reasons.push("My physical profile also appears to align well with the type of players your program has historically recruited.");
+    reasons.push(pickVariant([
+      "My physical profile appears to align well with the type of players your program has historically recruited.",
+      "I believe my physical profile fits the type of player your program tends to recruit.",
+      "From what I can tell, my build and physical profile line up well with players your program has brought in before.",
+    ]));
   }
   if(confPhrase){
     reasons.push(confPhrase);
+  }
+  // Reihenfolge der Gruende zufaellig mischen (Fisher-Yates) — selbst bei
+  // identischem Inhalt entsteht so ein anderer Satzaufbau, statt dass
+  // immer exakt derselbe Text in derselben Reihenfolge erscheint.
+  for(let i = reasons.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [reasons[i], reasons[j]] = [reasons[j], reasons[i]];
   }
   return reasons.slice(0, 3);
 }
@@ -47850,12 +47928,24 @@ function buildStatsSentence(profile){
   if(profile.position === 'GK'){
     if(!isNaN(conceded) && gp > 0){
       const gaa = (conceded / gp).toFixed(2);
-      return `I have competed in ${gp} matches this season with a goals-against average of ${gaa}.`;
+      return pickVariant([
+        `I have competed in ${gp} matches this season with a goals-against average of ${gaa}.`,
+        `This season, I've played in ${gp} matches and posted a goals-against average of ${gaa}.`,
+        `So far this season I've appeared in ${gp} matches, with a goals-against average of ${gaa}.`,
+      ]);
     }
-    return `I have competed in ${gp} matches this season as a goalkeeper.`;
+    return pickVariant([
+      `I have competed in ${gp} matches this season as a goalkeeper.`,
+      `This season, I've played in ${gp} matches as a goalkeeper.`,
+      `So far this season I've appeared in ${gp} matches between the posts.`,
+    ]);
   }
   const gaText = (goals || assists) ? `, recording ${goals} goals and ${assists} assists` : '';
-  return `I have competed in ${gp} matches this season${gaText}.`;
+  return pickVariant([
+    `I have competed in ${gp} matches this season${gaText}.`,
+    `This season, I've played in ${gp} matches${gaText}.`,
+    `So far this season I've appeared in ${gp} matches${gaText}.`,
+  ]);
 }
 
 function generateSubjectLine(profile, posLabel){
@@ -47922,26 +48012,62 @@ function generateRecruitingEmail(m, profile){
     levelLabel = levelOption.labelEn.replace(/\s*\(Abroad\)/i, '') + ` (${profile.country})`;
   }
   const clubLine = profile.clubName
-    ? `I am currently playing for ${profile.clubName} at the ${levelLabel} level, where I have developed experience competing in a demanding soccer environment.`
-    : `I am currently playing at the ${levelLabel} level, where I have developed experience competing in a demanding soccer environment.`;
+    ? pickVariant([
+        `I am currently playing for ${profile.clubName} at the ${levelLabel} level, where I have developed experience competing in a demanding soccer environment.`,
+        `I currently play for ${profile.clubName} at the ${levelLabel} level, which has given me experience competing in a demanding soccer environment.`,
+        `At the moment, I play for ${profile.clubName} at the ${levelLabel} level, where I've gained experience in a demanding, competitive soccer environment.`,
+      ])
+    : pickVariant([
+        `I am currently playing at the ${levelLabel} level, where I have developed experience competing in a demanding soccer environment.`,
+        `I currently compete at the ${levelLabel} level, which has given me experience in a demanding soccer environment.`,
+        `At the moment, I play at the ${levelLabel} level, where I've gained experience competing in a demanding, competitive environment.`,
+      ]);
 
   const statsSentence = buildStatsSentence(profile);
 
   const confKey = normalizeConference(m.program.conf);
-  const confPhrase = confKey ? CONFERENCE_PHRASES[confKey] : null;
+  // Fallback auf die generische Phrase, damit die Conference wirklich
+  // IMMER erwaehnt wird, auch bei den ~16 Conferences ohne eigene,
+  // handgeschriebene Phrase.
+  const confPhrase = (confKey ? CONFERENCE_PHRASES[confKey] : null) || genericConferencePhrase(m.program.conf);
   const reasons = buildCollegeReasons(m, confPhrase);
   const needLevel = getPositionNeed(m);
   const opening = POSITION_NEED_OPENING[needLevel](posLabel);
 
-  const fitParagraph = reasons.length
-    ? `I am especially interested in ${m.program.name} because ${reasons.join(' ')}`
-    : `I am especially interested in ${m.program.name} because of the opportunity it offers for my continued development as a student-athlete.`;
+  // Team-Stil-Kompliment als eigener, garantierter Satz direkt im
+  // Fit-Absatz — konkurriert bewusst NICHT mit den anderen (max. 3)
+  // Gruenden um einen Platz, damit es wirklich in jeder Email vorkommt.
+  const styleSentence = buildStyleSentence();
 
-  const recruitingFitLine = "Based on my background and your current roster situation, I believe my profile could be a strong fit for your upcoming recruiting needs.";
+  const interestLeadIn = reasons.length
+    ? pickVariant([
+        `I am especially interested in ${m.program.name} because`,
+        `${m.program.name} stands out to me in particular because`,
+        `What draws me especially to ${m.program.name} is that`,
+      ])
+    : pickVariant([
+        `I am especially interested in ${m.program.name} because of the opportunity it offers for my continued development as a student-athlete.`,
+        `${m.program.name} stands out to me because of the opportunity it offers for my continued development as a student-athlete.`,
+        `What draws me to ${m.program.name} is the opportunity it offers for my continued development as a student-athlete.`,
+      ]);
+
+  const fitParagraph = reasons.length
+    ? `${interestLeadIn} ${reasons.join(' ')} ${styleSentence}`
+    : `${interestLeadIn} ${styleSentence}`;
+
+  const recruitingFitLine = pickVariant([
+    "Based on my background and your current roster situation, I believe my profile could be a strong fit for your upcoming recruiting needs.",
+    "Given my background and what I understand of your current roster needs, I believe I could be a strong fit for your program going forward.",
+    "I believe my background makes me a strong potential fit for your program's recruiting needs this cycle.",
+  ]);
 
   const gpaValue = parseFloat(profile.gpa);
   const gpaSentence = (!isNaN(gpaValue) && gpaValue > 3.0)
-    ? `Beyond my performance on the field, I take the same discipline and responsibility into the classroom, maintaining a ${gpaValue.toFixed(2)} GPA.`
+    ? pickVariant([
+        `Beyond my performance on the field, I take the same discipline and responsibility into the classroom, maintaining a ${gpaValue.toFixed(2)} GPA.`,
+        `Academics matter to me just as much as soccer — I currently hold a ${gpaValue.toFixed(2)} GPA.`,
+        `Off the field, I bring the same discipline to the classroom and currently maintain a ${gpaValue.toFixed(2)} GPA.`,
+      ])
     : null;
 
   const contactParts = [];
@@ -47949,10 +48075,29 @@ function generateRecruitingEmail(m, profile){
   if(profile.phone) contactParts.push(profile.phone);
   const videoLine = profile.video ? `\n${profile.video}` : '';
 
+  // Als Roh-String validiert statt mit parseInt umgewandelt — parseInt
+  // wuerde "00" (eine echte, eigenstaendige Rueckennummer-Konvention,
+  // v.a. bei Torwarten) faelschlich zu "0" zusammenziehen.
+  const jerseyRaw = (profile.jerseyNumber || '').trim();
+  // "Club" passt nur bei einem Auslandsverein/einer Jugendliga — bei einem
+  // US-College-Programm (NCAA D1/D2/D3, JUCO, NAIA) spielt man fuer ein
+  // "team"/"program", nicht fuer einen "club". Sonst stuende da z.B.
+  // woertlich falsch "#9 for my club", obwohl der Spieler aktuell NCAA
+  // spielt.
+  const isCollegeLevel = ['d1','d2','d3','juco','naia'].includes(profile.currentLevelId);
+  const teamNoun = isCollegeLevel ? 'team' : 'club';
+  const jerseyPhrase = /^\d{1,2}$/.test(jerseyRaw)
+    ? pickVariant([
+        `, wearing #${jerseyRaw}`,
+        `, playing under #${jerseyRaw}`,
+        `, currently #${jerseyRaw} for my ${teamNoun}`,
+      ])
+    : '';
+
   const bodyParts = [
     coachGreeting,
     '',
-    `My name is ${playerName}, and I am a ${posLabel} from ${country} graduating in ${gradYear}.`,
+    `My name is ${playerName}, and I am a ${posLabel} from ${country} graduating in ${gradYear}${jerseyPhrase}.`,
     '',
     `${clubLine} ${opening}`,
     '',
@@ -47965,10 +48110,21 @@ function generateRecruitingEmail(m, profile){
     '',
   );
   if(gpaSentence){ bodyParts.push(gpaSentence, ''); }
-  bodyParts.push(
-    "I have attached my player profile" + (profile.video ? " and highlight video" : "") + " for your review. I would appreciate the opportunity to introduce myself and learn more about your program.",
-    '',
+  const videoWord = profile.video ? " and highlight video" : "";
+  const attachedProfileLine = pickVariant([
+    `I have attached my player profile${videoWord} for your review. I would appreciate the opportunity to introduce myself and learn more about your program.`,
+    `I've included my player profile${videoWord} for your review, and would welcome the chance to introduce myself and learn more about your program.`,
+    `My player profile${videoWord} is attached for your review. I would love the opportunity to introduce myself and learn more about your program.`,
+  ]);
+  const thankYouLine = pickVariant([
     "Thank you very much for your time and consideration.",
+    "Thank you for taking the time to consider my interest in your program.",
+    "I appreciate you taking the time to consider my profile.",
+  ]);
+  bodyParts.push(
+    attachedProfileLine,
+    '',
+    thankYouLine,
     '',
     "Best regards,",
     '',
@@ -51795,6 +51951,7 @@ function applyStaticLanguage(lang){
   setText('lblEmailBody', 'Email-Text', 'Email Body');
   populateCountryDropdown(lang);
   setPlaceholder('playerEmail', 'deine@email.de', 'you@email.com');
+  setText('lblJerseyNumber', 'Rückennummer (optional)', 'Jersey Number (optional)');
   setText('lblHeightCm', 'Größe (cm)', 'Height (cm)');
   setText('lblHeightFt', 'Größe', 'Height');
   setText('lblMatchesHeading', 'Matches', 'Matches');
@@ -52078,6 +52235,7 @@ document.getElementById('profileForm').addEventListener('submit', function(e){
     phone: document.getElementById('playerPhone').value.trim(),
     video: document.getElementById('playerVideo').value.trim(),
     gpa: document.getElementById('playerGpa').value.trim(),
+    jerseyNumber: document.getElementById('jerseyNumber').value.trim(),
     clubName: document.getElementById('currentClubName').value.trim(),
     position: document.getElementById('position').value,
     height: currentLang === 'en'
